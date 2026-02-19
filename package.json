@@ -1,15 +1,18 @@
 {
   "name": "automate-me",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Natural language academic workflow engine powered by AccomplishAI + GPT-4o",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "next": "16.1.6",
+    "openai": "^6.22.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
