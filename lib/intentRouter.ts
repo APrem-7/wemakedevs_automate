@@ -5,7 +5,15 @@
 import OpenAI from "openai";
 import { ParsedIntent, WorkflowType, SourceType } from "./types";
 
-const openai = new OpenAI();
+// Validate OpenAI API key before creating client
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error(
+    "OPENAI_API_KEY environment variable is required but not set. " +
+      "Please set the OpenAI API key in your environment variables.",
+  );
+}
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Tool definition — tells GPT-4o the exact shape we want back
 const PARSE_INTENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
@@ -58,8 +66,7 @@ const PARSE_INTENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
         },
         confidence: {
           type: "number",
-          description:
-            "How confident you are in this parsing, 0.0 to 1.0.",
+          description: "How confident you are in this parsing, 0.0 to 1.0.",
         },
       },
       required: [
@@ -125,16 +132,23 @@ export async function parseIntent(prompt: string): Promise<ParsedIntent> {
     args = JSON.parse(fnCall.function.arguments);
   } catch {
     throw new Error(
-      "Failed to parse GPT response — received malformed JSON from function call."
+      "Failed to parse GPT response — received malformed JSON from function call.",
     );
   }
 
   // Runtime validation — GPT might return values outside our allowed sets
   const VALID_WORKFLOW_TYPES: WorkflowType[] = [
-    "flashcards", "quiz", "summary", "organize", "audio", "revision",
+    "flashcards",
+    "quiz",
+    "summary",
+    "organize",
+    "audio",
+    "revision",
   ];
   const VALID_SOURCE_TYPES: SourceType[] = [
-    "notion", "local_files", "downloads",
+    "notion",
+    "local_files",
+    "downloads",
   ];
 
   const workflowType = args.workflow_type as string;
@@ -142,13 +156,13 @@ export async function parseIntent(prompt: string): Promise<ParsedIntent> {
 
   if (!VALID_WORKFLOW_TYPES.includes(workflowType as WorkflowType)) {
     throw new Error(
-      `GPT returned invalid workflow type "${workflowType}". Valid types: ${VALID_WORKFLOW_TYPES.join(", ")}`
+      `GPT returned invalid workflow type "${workflowType}". Valid types: ${VALID_WORKFLOW_TYPES.join(", ")}`,
     );
   }
 
   if (!VALID_SOURCE_TYPES.includes(sourceType as SourceType)) {
     throw new Error(
-      `GPT returned invalid source type "${sourceType}". Valid types: ${VALID_SOURCE_TYPES.join(", ")}`
+      `GPT returned invalid source type "${sourceType}". Valid types: ${VALID_SOURCE_TYPES.join(", ")}`,
     );
   }
 
