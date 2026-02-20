@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap";
 @import "tailwindcss";
 
 :root {
@@ -9,7 +9,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: Inter, system-ui, -apple-system, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,7 +22,11 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
 }
 
 ::-webkit-scrollbar {
@@ -40,7 +44,7 @@ body {
 
 /* ── ORCA Animations ────────────────────────────────────────────── */
 
-@keyframes orcaFadeUp {
+@keyframes orca-fade-up-kf {
   from {
     opacity: 0;
     transform: translateY(12px);
@@ -52,7 +56,7 @@ body {
   }
 }
 
-@keyframes orcaScaleIn {
+@keyframes orca-scale-in-kf {
   from {
     opacity: 0;
     transform: scale(0.94);
@@ -64,7 +68,7 @@ body {
   }
 }
 
-@keyframes orcaToastSlide {
+@keyframes orca-toast-slide-kf {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -77,13 +81,13 @@ body {
 }
 
 .orca-fade-up {
-  animation: orcaFadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: orca-fade-up-kf 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .orca-scale-in {
-  animation: orcaScaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: orca-scale-in-kf 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .orca-toast {
-  animation: orcaToastSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: orca-toast-slide-kf 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
