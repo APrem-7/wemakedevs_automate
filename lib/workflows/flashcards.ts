@@ -1,7 +1,8 @@
 // lib/workflows/flashcards.ts
-// Flashcard generation workflow — 7 source-conditional steps.
+// Flashcard generation workflow — 6 source-conditional steps.
 // Steps are filtered by sourceType at runtime in instructionGenerator.ts.
 // Placeholders like {topic} and {source} get replaced by the instruction generator.
+// No LLM cleanup step — NotebookLM handles content processing natively.
 
 import { WorkflowTemplate } from "../types";
 
@@ -12,7 +13,7 @@ export const flashcardsTemplate: WorkflowTemplate = {
     "Export your {topic} notes from {source}, upload to NotebookLM, and generate flashcards for study.",
   estimatedTime: "10-15 min",
   steps: [
-    // ── Step: Export from Notion (only when source is Notion) ──
+    // ── Step 1: Export from Notion (only when source is Notion) ──
     {
       id: 1,
       name: "Export notes from Notion",
@@ -28,7 +29,7 @@ export const flashcardsTemplate: WorkflowTemplate = {
       sourceFilter: ["notion"],
     },
 
-    // ── Step: Locate local files (only when source is local_files or downloads) ──
+    // ── Step 2: Locate local files (only when source is local_files or downloads) ──
     {
       id: 2,
       name: "Locate your files",
@@ -43,22 +44,9 @@ export const flashcardsTemplate: WorkflowTemplate = {
       sourceFilter: ["local_files", "downloads"],
     },
 
-    // ── Step: Optional LLM cleanup (always included, user can skip) ──
+    // ── Step 3: Upload to NotebookLM (always) ──
     {
       id: 3,
-      name: "Clean up notes (optional)",
-      description:
-        "Use AI to clean and format your raw notes before uploading. You can skip this step if your notes are already well-formatted.",
-      type: "llm_process",
-      instruction:
-        "Paste your raw notes content here and we'll clean them up — fixing formatting, removing duplicates, and organizing the content for better flashcard generation.",
-      status: "pending",
-      optional: true,
-    },
-
-    // ── Step: Upload to NotebookLM (always) ──
-    {
-      id: 4,
       name: "Upload sources to NotebookLM",
       description:
         "AccomplishAI will open Google NotebookLM and upload your exported files.",
@@ -73,9 +61,9 @@ export const flashcardsTemplate: WorkflowTemplate = {
       status: "pending",
     },
 
-    // ── Step: Generate flashcards (always) ──
+    // ── Step 4: Generate flashcards (always) ──
     {
-      id: 5,
+      id: 4,
       name: "Generate flashcards in NotebookLM",
       description:
         "AccomplishAI will use NotebookLM's Study Guide feature to generate flashcards.",
@@ -88,9 +76,9 @@ export const flashcardsTemplate: WorkflowTemplate = {
       status: "pending",
     },
 
-    // ── Step: Get share link (always) ──
+    // ── Step 5: Copy share link (always) ──
     {
-      id: 6,
+      id: 5,
       name: "Copy the share link",
       description:
         "AccomplishAI will get the shareable link for your NotebookLM notebook.",
@@ -102,9 +90,9 @@ export const flashcardsTemplate: WorkflowTemplate = {
       status: "pending",
     },
 
-    // ── Step: Paste link back (always) ──
+    // ── Step 6: Paste link back (always) ──
     {
-      id: 7,
+      id: 6,
       name: "Paste the NotebookLM link",
       description:
         "Paste the NotebookLM share link so we can save it for you.",
