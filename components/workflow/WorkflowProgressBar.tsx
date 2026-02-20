@@ -8,12 +8,20 @@ interface WorkflowProgressBarProps {
 }
 
 export function WorkflowProgressBar({ progress }: WorkflowProgressBarProps) {
+    const clampedProgress = Math.min(100, Math.max(0, progress));
+
     return (
-        <div className="w-full h-[3px] bg-white/[0.06] rounded-full overflow-hidden mt-4">
+        <div
+            className="w-full h-[3px] bg-white/[0.06] rounded-full overflow-hidden mt-4"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={clampedProgress}
+        >
             <div
                 className="h-full rounded-full transition-all duration-700 ease-out"
                 style={{
-                    width: `${progress}%`,
+                    width: `${clampedProgress}%`,
                     background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
                 }}
             />
