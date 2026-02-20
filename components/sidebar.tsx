@@ -71,11 +71,9 @@ export function Sidebar() {
                         expanded={notionOpen}
                         onToggle={() => setNotionOpen(!notionOpen)}
                     />
-                    {notionOpen && (
-                        <div className="mt-1">
-                            <NotionTree />
-                        </div>
-                    )}
+                    <div className={`mt-1 ${notionOpen ? "" : "hidden"}`}>
+                        <NotionTree />
+                    </div>
                 </div>
 
                 {/* ── Local Files Section ─────────────────── */}
@@ -86,11 +84,9 @@ export function Sidebar() {
                         expanded={filesOpen}
                         onToggle={() => setFilesOpen(!filesOpen)}
                     />
-                    {filesOpen && (
-                        <div className="mt-1">
-                            <LocalFilesSection />
-                        </div>
-                    )}
+                    <div className={`mt-1 ${filesOpen ? "" : "hidden"}`}>
+                        <LocalFilesSection />
+                    </div>
                 </div>
 
                 {/* ── Calendar Section ────────────────────── */}
@@ -101,22 +97,20 @@ export function Sidebar() {
                         expanded={calendarOpen}
                         onToggle={() => setCalendarOpen(!calendarOpen)}
                     />
-                    {calendarOpen && (
-                        <div className="mt-1 px-3 space-y-2">
-                            <div className="flex items-center gap-2 py-1.5 text-sm text-zinc-400">
-                                <span className="w-2 h-2 rounded-full bg-red-400/80 shrink-0" />
-                                <span className="truncate">OS Midterm — Mar 5</span>
-                            </div>
-                            <div className="flex items-center gap-2 py-1.5 text-sm text-zinc-400">
-                                <span className="w-2 h-2 rounded-full bg-amber-400/80 shrink-0" />
-                                <span className="truncate">DBMS Final — Mar 18</span>
-                            </div>
-                            <div className="flex items-center gap-2 py-1.5 text-sm text-zinc-400">
-                                <span className="w-2 h-2 rounded-full bg-blue-400/80 shrink-0" />
-                                <span className="truncate">CN Lab Exam — Mar 22</span>
-                            </div>
+                    <div className={`mt-1 ${calendarOpen ? "px-3 space-y-2" : "hidden"}`}>
+                        <div className="flex items-center gap-2 py-1.5 text-sm text-zinc-400">
+                            <span className="w-2 h-2 rounded-full bg-red-400/80 shrink-0" />
+                            <span className="truncate">OS Midterm — Mar 5</span>
                         </div>
-                    )}
+                        <div className="flex items-center gap-2 py-1.5 text-sm text-zinc-400">
+                            <span className="w-2 h-2 rounded-full bg-amber-400/80 shrink-0" />
+                            <span className="truncate">DBMS Final — Mar 18</span>
+                        </div>
+                        <div className="flex items-center gap-2 py-1.5 text-sm text-zinc-400">
+                            <span className="w-2 h-2 rounded-full bg-blue-400/80 shrink-0" />
+                            <span className="truncate">CN Lab Exam — Mar 22</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
