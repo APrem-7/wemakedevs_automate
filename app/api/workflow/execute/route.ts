@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { workflows } from "@/lib/db/schema";
 import { executeStep } from "@/lib/accomplish/bridge";
-import type { WorkflowStep, ErrorResponse } from "@/lib/types";
+import type { WorkflowStep, ErrorResponse, WorkflowType } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
     let body: { workflowId?: string; stepId?: number };
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
         // Execute through Accomplish bridge
         const intent = {
-            workflowType: row.type as "flashcards",
+            workflowType: row.type as WorkflowType,
             source: row.source,
             sourceType: row.sourceType as "notion" | "local_files" | "downloads",
             topic: row.topic,
