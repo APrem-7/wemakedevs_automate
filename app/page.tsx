@@ -7,25 +7,32 @@ import { QuickActions } from "@/components/quick-actions";
 import { CommandInput } from "@/components/command-input";
 import {
   WorkflowPreviewCard,
-  type WorkflowPreview,
 } from "@/components/workflow/WorkflowPreviewCard";
-import { useStore } from "@/lib/orca-store";
-
-const mockPreviewData: WorkflowPreview = {
-  title: "Generate Flashcards",
-  subtitle: "for Operating Systems",
-  confidence: 95,
-  sourceMaterial: { name: "OS - Chapter 4", type: "notion" },
-  architecture: { stageCount: 6, label: "AI QA Pipeline" },
-  estimatedDuration: "12–15 min",
-  systemNotes:
-    "Diagrams detected in Chapter 4. Orca will generate descriptive flashcards for visual concepts to ensure complete coverage.",
-};
+import { useWorkflowStore } from "@/lib/workflow-store";
 
 export default function Home() {
-  const appState = useStore((s) => s.appState);
-  const startWorkflow = useStore((s) => s.startWorkflow);
-  const cancelWorkflow = useStore((s) => s.cancelWorkflow);
+  const appState = useWorkflowStore((s) => s.appState);
+  const startWorkflow = useWorkflowStore((s) => s.startWorkflow);
+  const cancelWorkflow = useWorkflowStore((s) => s.cancelWorkflow);
+  const intent = useWorkflowStore((s) => s.intent);
+  const workflow = useWorkflowStore((s) => s.workflow);
+
+  // Map backend store data to frontend preview format
+  const previewData = intent && workflow ? {
+    title: workflow.title,
+    subtitle: intent.topic ? `for ${intent.topic}` : undefined,
+    confidence: Math.round(intent.confidence * 100),
+    sourceMaterial: {
+      name: intent.source,
+      type: (intent.sourceType === "notion" ? "notion" : "local") as "notion" | "local",
+    },
+    architecture: {
+      stageCount: workflow.steps.length,
+      label: "AI Pipeline",
+    },
+    estimatedDuration: workflow.estimatedTime,
+    systemNotes: workflow.description,
+  } : null;
 
   return (
     <div className="flex h-screen bg-[#0f1117] text-white overflow-hidden font-sans selection:bg-blue-500/30">
@@ -40,9 +47,9 @@ export default function Home() {
       </main>
 
       {/* Workflow Preview Overlay */}
-      {appState === "preview" && (
+      {appState === "preview" && previewData && (
         <WorkflowPreviewCard
-          data={mockPreviewData}
+          data={previewData}
           onExecute={startWorkflow}
           onCancel={cancelWorkflow}
         />
