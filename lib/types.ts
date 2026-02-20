@@ -63,6 +63,20 @@ export interface ParsedIntent {
   confidence: number;
 }
 
+// ─── Drag-drop context from the frontend ───
+export interface ContextItem {
+  id: string;
+  title: string;
+  source: "notion" | "local";
+  icon?: string;
+  iconType?: "emoji" | "external";
+}
+
+export interface ContextPayload {
+  source?: string;
+  items: ContextItem[];
+}
+
 // ─── Success response from POST /api/workflow/start ───
 export interface StartResponse {
   success: true;
