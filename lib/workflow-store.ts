@@ -1,7 +1,7 @@
 // lib/workflow-store.ts
 // Unified Zustand store managing the entire app state machine.
 // Replaces the old orca-store.ts.
-//
+
 // State machine: idle → loading → preview → running → completed/failed
 // All transitions are guarded by canTransition().
 
@@ -14,9 +14,8 @@ import type {
     StepStatus,
 } from "./types";
 
-// ═══════════════════════════════════════════════════════════════════════
 // STATE TRANSITION GUARD
-// ═══════════════════════════════════════════════════════════════════════
+
 
 const ALLOWED_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
     idle: ["preview", "running"], // "running" added to support loading conceptually
@@ -33,37 +32,35 @@ function canTransition(
     return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
 // STORE TYPES
-// ═══════════════════════════════════════════════════════════════════════
 
 // App-level state (superset of WorkflowStatus — adds "loading" for UX)
 export type AppState = "idle" | "loading" | "preview" | "executing" | "completed" | "failed";
 
 interface WorkflowStore {
-    // ── App state machine ──
+    //  App state machine 
     appState: AppState;
 
-    // ── Prompt + context ──
+    // Prompt + context 
     currentPrompt: string;
     contextItems: ContextItem[];
 
-    // ── Resolved workflow data (from API) ──
+    // Resolved workflow data (from API) 
     intent: ParsedIntent | null;
     workflow: WorkflowTemplate | null;
     workflowId: string | null;
 
-    // ── Execution tracking ──
+    // Execution tracking
     currentStepIndex: number;
     workflowStartTime: number | null;
 
-    // ── Result ──
+    // Result
     resultLink: string | null;
 
-    // ── Error handling ──
+    // Error handling
     error: string | null;
 
-    // ── Actions ──
+    // Actions 
     setPrompt: (prompt: string) => void;
     addContextItem: (item: ContextItem) => void;
     removeContextItem: (id: string) => void;
@@ -76,9 +73,9 @@ interface WorkflowStore {
     clearError: () => void;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+
 // MAP APP STATE → WORKFLOW STATUS (for DB/guard purposes)
-// ═══════════════════════════════════════════════════════════════════════
+
 
 function appStateToWorkflowStatus(state: AppState): WorkflowStatus {
     switch (state) {
@@ -96,12 +93,12 @@ function appStateToWorkflowStatus(state: AppState): WorkflowStatus {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+
 // STORE IMPLEMENTATION
-// ═══════════════════════════════════════════════════════════════════════
+
 
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
-    // ── Initial state ──
+    // Initial state 
     appState: "idle",
     currentPrompt: "",
     contextItems: [],
@@ -113,8 +110,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     resultLink: null,
     error: null,
 
-    // ── Prompt management ──
-
+    // Prompt management
     setPrompt: (prompt: string) => set({ currentPrompt: prompt }),
 
     addContextItem: (item: ContextItem) =>
@@ -128,7 +124,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             contextItems: state.contextItems.filter((ci) => ci.id !== id),
         })),
 
-    // ── Submit prompt → call API → transition to preview ──
+    // Submit prompt → call API → transition to preview 
 
     submitPrompt: async () => {
         const { currentPrompt, contextItems, appState } = get();
@@ -161,8 +157,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
                 throw new Error(data.error || "Failed to process request");
             }
 
-            // Guard: idle → preview
-            if (!canTransition("idle", "preview")) {
+            // Guard: current state → preview
+            if (!canTransition(appStateToWorkflowStatus(get().appState), "preview")) {
                 throw new Error("Invalid state transition");
             }
 
@@ -179,14 +175,14 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         }
     },
 
-    // ── Start workflow execution ──
+    // Start workflow execution 
 
     startWorkflow: () => {
-        const { workflow } = get();
+        const { workflow, appState } = get();
         if (!workflow) return;
 
-        // Guard: preview → running
-        if (!canTransition("preview", "running")) return;
+        // Guard: current state → running
+        if (!canTransition(appStateToWorkflowStatus(appState), "running")) return;
 
         // Set first step as active
         const updatedSteps = workflow.steps.map((step, i) => ({
@@ -202,7 +198,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         });
     },
 
-    // ── Cancel and return to idle ──
+    // Cancel and return to idle
 
     cancelWorkflow: () => {
         const { appState } = get();
@@ -225,10 +221,14 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         });
     },
 
-    // ── Mark current step as completed, advance to next ──
+    // Mark current step as completed, advance to next
 
     markStepComplete: () => {
-        const { workflow, currentStepIndex } = get();
+        const { workflow, currentStepIndex, appState } = get();
+
+        // Guard: only allow step completion if we are actively executing
+        if (appState !== "executing") return;
+
         if (!workflow) return;
 
         const updatedSteps = workflow.steps.map((step, i) => {
@@ -243,8 +243,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         const isLastStep = nextIndex >= updatedSteps.length;
 
         if (isLastStep) {
-            // Guard: running → completed
-            if (!canTransition("running", "completed")) return;
+            // Guard: current state → completed
+            if (!canTransition(appStateToWorkflowStatus(appState), "completed")) return;
 
             set({
                 appState: "completed",
@@ -259,14 +259,14 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         }
     },
 
-    // ── Submit a link (for link_input steps) ──
+    // Submit a link (for link_input steps)
 
     submitLink: (link: string) => {
         set({ resultLink: link });
         get().markStepComplete();
     },
 
-    // ── Return to idle from completed/failed ──
+    // Return to idle from completed/failed
 
     resetToIdle: () => {
         set({
@@ -283,7 +283,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         });
     },
 
-    // ── Clear error ──
+    // Clear error
 
     clearError: () => set({ error: null }),
 }));
