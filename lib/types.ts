@@ -102,3 +102,22 @@ export interface ProcessResponse {
   success: true;
   processed: string; // Cleaned/formatted content
 }
+
+// ─── Execution UI types (pipeline view) ───
+export type ExecutionStageStatus = "completed" | "current" | "pending" | "failed";
+
+export interface WorkflowStage {
+  id: string;
+  title: string;
+  description?: string;
+  command?: string;
+  status: ExecutionStageStatus;
+  duration?: string;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  name: string;
+  progress: number;
+  stages: WorkflowStage[];
+}
