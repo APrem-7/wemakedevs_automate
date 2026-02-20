@@ -30,7 +30,7 @@ function getOpenAI(): OpenAI {
   return _openai;
 }
 
-// RULE-BASED FAST PATH — instant, deterministic, no API cost(yey)
+// RULE-BASED FAST PATH — instant, deterministic, no API cost(we save money yey)
 
 const WORKFLOW_RULES: {
   pattern: RegExp;
@@ -43,9 +43,9 @@ const WORKFLOW_RULES: {
       confidence: 0.95,
     },
     {
-      pattern: /\b(quiz(zes)?|test(s)?|practice\s?(questions?)?)\b/i,
+      pattern: /\b(quiz(zes)?|practice\s?(questions?)?|test\s+(on|about)|mock\s+test(s)?|practice\s+test(s)?)\b/i,
       type: "quiz",
-      confidence: 0.95,
+      confidence: 0.75,
     },
     {
       pattern: /\b(summar(y|ize|ise|ized|ised|izing|ising))\b/i,
@@ -63,12 +63,14 @@ const WORKFLOW_RULES: {
       confidence: 0.9,
     },
     {
-      pattern: /\b(revision|revise|revising|exam(s)?|study\s?plan|schedule)\b/i,
+      pattern: /\b(revision|revise|revising|exam(s)?|study\s?plan|study\s*schedule|exam\s*schedule|revision\s*schedule)\b/i,
       type: "revision",
       confidence: 0.85,
     },
   ];
 
+
+//clasifies by rule....
 function classifyByRules(
   text: string,
 ): { type: WorkflowType; confidence: number } | null {
@@ -79,6 +81,7 @@ function classifyByRules(
   }
   return null; // No match → use LLM
 }
+
 
 // Infer sourceType from drag-drop context
 
@@ -96,7 +99,7 @@ function inferSourceLabel(context?: ContextPayload): string {
   return hasNotion ? "Notion" : "Local files";
 }
 
-// ─── Extract topic from prompt (heuristic) ───
+// Extract topic from prompt (heuristic way) 
 
 const FILLER_WORDS = new Set([
   "generate",
@@ -160,8 +163,10 @@ function extractTopic(prompt: string): string {
   return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
+
+
 // ═══════════════════════════════════════════════════════════════════════
-// PRIMARY ENTRY POINT — tries rules first, falls back to LLM
+// PRIMARY ENTRY POINT — tries rules first, else falls back to LLM
 // ═══════════════════════════════════════════════════════════════════════
 
 export async function resolveIntent(
@@ -181,7 +186,7 @@ export async function resolveIntent(
   }
 
   // No rule match → fall back to LLM
-  return parseIntent(prompt);
+  return parseIntent(prompt, context);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -272,14 +277,21 @@ Their notes can come from:
 Always call the parse_study_intent function with your best interpretation.
 If the request is unclear or not study-related, still make your best guess but set confidence low.`;
 
-export async function parseIntent(prompt: string): Promise<ParsedIntent> {
+export async function parseIntent(prompt: string, context?: ContextPayload): Promise<ParsedIntent> {
   const openai = getOpenAI();
+
+  const impliedSourceLabel = inferSourceLabel(context);
+  const impliedSourceType = inferSourceType(context);
+
+  const enrichedPrompt = `User Request: ${prompt}
+
+[System Context: Based on provided context/files, the expected source is "${impliedSourceLabel}" (source_type: "${impliedSourceType}") unless the user request explicitly overrides it.]`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt },
+      { role: "user", content: enrichedPrompt },
     ],
     tools: [PARSE_INTENT_TOOL],
     tool_choice: {
