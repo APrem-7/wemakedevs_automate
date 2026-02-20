@@ -1,18 +1,30 @@
 // app/api/workflow/start/route.ts
 // POST /api/workflow/start
 //
-// Receives a prompt, parses intent with GPT-4o, returns a populated workflow.
-// Request:  { "prompt": "Generate flashcards for my OS course" }
-// Response: { "success": true, "intent": {...}, "workflow": {...} }
+// Receives a prompt + optional context, resolves intent (rules → LLM fallback),
+// looks up workflow template, populates it, saves to DB with status "preview",
+// and returns the workflow + workflowId.
+//
+// Request:  { "prompt": "Generate flashcards for OS", "context": { items: [...] } }
+// Response: { "success": true, "intent": {...}, "workflow": {...}, "workflowId": "..." }
 
 import { NextRequest, NextResponse } from "next/server";
-import { parseIntent } from "@/lib/intentRouter";
-import { getWorkflowTemplate, getAvailableWorkflows } from "@/lib/workflows/registry";
+import { randomUUID } from "crypto";
+import { resolveIntent } from "@/lib/intentRouter";
+import {
+  getWorkflowTemplate,
+  getAvailableWorkflows,
+} from "@/lib/workflows/registry";
 import { populateWorkflow } from "@/lib/instructionGenerator";
-import type { StartResponse, ErrorResponse } from "@/lib/types";
+import { db } from "@/lib/db";
+import { workflows } from "@/lib/db/schema";
+import type {
+  ErrorResponse,
+  ContextPayload,
+} from "@/lib/types";
 
 export async function POST(request: NextRequest) {
-  let body: { prompt?: string };
+  let body: { prompt?: string; context?: ContextPayload };
 
   try {
     body = await request.json();
@@ -25,7 +37,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(error, { status: 400 });
   }
 
-  const { prompt } = body;
+  const { prompt, context } = body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
     const error: ErrorResponse = {
@@ -37,7 +49,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const intent = await parseIntent(prompt.trim());
+    // Resolve intent (rule-based fast path → LLM fallback)
+    const intent = await resolveIntent(prompt.trim(), context);
 
     const template = getWorkflowTemplate(intent.workflowType);
 
@@ -52,14 +65,24 @@ export async function POST(request: NextRequest) {
 
     const workflow = populateWorkflow(template, intent);
 
-    const response: StartResponse = {
+    // Persist to DB with status "preview"
+    const workflowId = randomUUID();
+    db.insert(workflows).values({
+      id: workflowId,
+      type: intent.workflowType,
+      topic: intent.topic,
+      source: intent.source,
+      sourceType: intent.sourceType,
+      status: "preview",
+      steps: JSON.stringify(workflow.steps),
+    }).run();
+
+    return NextResponse.json({
       success: true,
       intent,
       workflow,
-    };
-
-    return NextResponse.json(response);
-    
+      workflowId,
+    });
   } catch (err) {
     console.error("Error in /api/workflow/start:", err);
 
@@ -72,3 +95,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(error, { status: 500 });
   }
 }
+
