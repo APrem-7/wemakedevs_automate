@@ -1,21 +1,193 @@
 // lib/intentRouter.ts
-// Uses OpenAI function calling to parse a natural language prompt
-// into structured data (workflow type, source type, topic, confidence).
+// Hybrid intent router: tries fast rule-based matching first,
+// falls back to OpenAI function calling when rules can't determine intent.
+//
+// resolveIntent() is the primary entry point — always returns ParsedIntent.
+// parseIntent() is the LLM fallback — preserved unchanged.
 
 import OpenAI from "openai";
-import { ParsedIntent, WorkflowType, SourceType } from "./types";
+import {
+  ParsedIntent,
+  WorkflowType,
+  SourceType,
+  ContextPayload,
+} from "./types";
 
-// Validate OpenAI API key before creating client
-if (!process.env.OPENAI_API_KEY) {
-  throw new Error(
-    "OPENAI_API_KEY environment variable is required but not set. " +
-      "Please set the OpenAI API key in your environment variables.",
-  );
+// OpenAI client (only created when LLM fallback is needed)
+
+let _openai: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error(
+        "OPENAI_API_KEY environment variable is required but not set. " +
+        "Please set the OpenAI API key in your environment variables.",
+      );
+    }
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
 }
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// RULE-BASED FAST PATH — instant, deterministic, no API cost(yey)
 
-// Tool definition — tells GPT-4o the exact shape we want back
+const WORKFLOW_RULES: {
+  pattern: RegExp;
+  type: WorkflowType;
+  confidence: number;
+}[] = [
+    {
+      pattern: /\b(flash\s?cards?|anki|memory\s?cards?)\b/i,
+      type: "flashcards",
+      confidence: 0.95,
+    },
+    {
+      pattern: /\b(quiz(zes)?|test(s)?|practice\s?(questions?)?)\b/i,
+      type: "quiz",
+      confidence: 0.95,
+    },
+    {
+      pattern: /\b(summar(y|ize|ise|ized|ised|izing|ising))\b/i,
+      type: "summary",
+      confidence: 0.9,
+    },
+    {
+      pattern: /\b(organize|organise|organizing|organising|structure|restructure)\b/i,
+      type: "organize",
+      confidence: 0.9,
+    },
+    {
+      pattern: /\b(audio|podcast|tts|text\s?to\s?speech)\b/i,
+      type: "audio",
+      confidence: 0.9,
+    },
+    {
+      pattern: /\b(revision|revise|revising|exam(s)?|study\s?plan|schedule)\b/i,
+      type: "revision",
+      confidence: 0.85,
+    },
+  ];
+
+function classifyByRules(
+  text: string,
+): { type: WorkflowType; confidence: number } | null {
+  for (const rule of WORKFLOW_RULES) {
+    if (rule.pattern.test(text)) {
+      return { type: rule.type, confidence: rule.confidence };
+    }
+  }
+  return null; // No match → use LLM
+}
+
+// Infer sourceType from drag-drop context
+
+function inferSourceType(context?: ContextPayload): SourceType {
+  if (!context?.items?.length) return "local_files";
+  const hasNotion = context.items.some((item) => item.source === "notion");
+  return hasNotion ? "notion" : "local_files";
+}
+
+// Infer human-readable source label
+
+function inferSourceLabel(context?: ContextPayload): string {
+  if (!context?.items?.length) return "Local files";
+  const hasNotion = context.items.some((item) => item.source === "notion");
+  return hasNotion ? "Notion" : "Local files";
+}
+
+// ─── Extract topic from prompt (heuristic) ───
+
+const FILLER_WORDS = new Set([
+  "generate",
+  "create",
+  "make",
+  "build",
+  "do",
+  "get",
+  "give",
+  "help",
+  "me",
+  "my",
+  "the",
+  "a",
+  "an",
+  "for",
+  "from",
+  "with",
+  "in",
+  "on",
+  "of",
+  "to",
+  "and",
+  "some",
+  "please",
+  "want",
+  "need",
+  "i",
+]);
+
+const WORKFLOW_KEYWORDS = new Set([
+  "flashcard",
+  "flashcards",
+  "quiz",
+  "quizzes",
+  "summary",
+  "summaries",
+  "summarize",
+  "organize",
+  "audio",
+  "podcast",
+  "revision",
+  "revise",
+  "exam",
+  "schedule",
+]);
+
+function extractTopic(prompt: string): string {
+  const words = prompt
+    .replace(/[^\w\s]/g, "") // strip punctuation
+    .split(/\s+/)
+    .filter(
+      (w) =>
+        w.length > 0 &&
+        !FILLER_WORDS.has(w.toLowerCase()) &&
+        !WORKFLOW_KEYWORDS.has(w.toLowerCase()),
+    );
+
+  if (words.length === 0) return "Study Material";
+  // Capitalize first letter of each remaining word
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PRIMARY ENTRY POINT — tries rules first, falls back to LLM
+// ═══════════════════════════════════════════════════════════════════════
+
+export async function resolveIntent(
+  prompt: string,
+  context?: ContextPayload,
+): Promise<ParsedIntent> {
+  const ruleMatch = classifyByRules(prompt);
+
+  if (ruleMatch) {
+    return {
+      workflowType: ruleMatch.type,
+      source: inferSourceLabel(context),
+      sourceType: inferSourceType(context),
+      topic: extractTopic(prompt),
+      confidence: ruleMatch.confidence,
+    };
+  }
+
+  // No rule match → fall back to LLM
+  return parseIntent(prompt);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LLM FALLBACK — GPT-4o function calling (unchanged from original)
+// ═══════════════════════════════════════════════════════════════════════
+
 const PARSE_INTENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
@@ -101,6 +273,8 @@ Always call the parse_study_intent function with your best interpretation.
 If the request is unclear or not study-related, still make your best guess but set confidence low.`;
 
 export async function parseIntent(prompt: string): Promise<ParsedIntent> {
+  const openai = getOpenAI();
+
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
