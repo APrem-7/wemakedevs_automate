@@ -193,7 +193,7 @@ export async function resolveIntent(
     };
   }
 
-  // No rule match → fall back to LLM
+  // No rule match → fall back to LLM (OpenAI GPT-4o function calling)
   return parseIntent(prompt, context);
 }
 

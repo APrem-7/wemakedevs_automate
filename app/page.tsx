@@ -9,6 +9,7 @@ import {
   WorkflowPreviewCard,
 } from "@/components/workflow/WorkflowPreviewCard";
 import { useWorkflowStore } from "@/lib/workflow-store";
+import { X } from "lucide-react";
 
 export default function Home() {
   const appState = useWorkflowStore((s) => s.appState);
@@ -16,6 +17,8 @@ export default function Home() {
   const cancelWorkflow = useWorkflowStore((s) => s.cancelWorkflow);
   const intent = useWorkflowStore((s) => s.intent);
   const workflow = useWorkflowStore((s) => s.workflow);
+  const error = useWorkflowStore((s) => s.error);
+  const clearError = useWorkflowStore((s) => s.clearError);
 
   // Hardcoded display names for each workflow type
   const WORKFLOW_DISPLAY_NAMES: Record<string, string> = {
@@ -52,6 +55,17 @@ export default function Home() {
         <div className="flex-1 flex flex-col items-center justify-center px-6">
           <HeroSection />
           <CommandInput />
+          {error && (
+            <div className="w-full max-w-2xl mx-auto mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3 orca-fade-up">
+              <span className="text-sm text-red-300/90 flex-1">{error}</span>
+              <button
+                onClick={clearError}
+                className="p-0.5 rounded hover:bg-white/10 transition-colors text-red-400 hover:text-white shrink-0 mt-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <QuickActions />
         </div>
       </main>
