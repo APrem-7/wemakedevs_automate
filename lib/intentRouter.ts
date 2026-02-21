@@ -147,7 +147,15 @@ const WORKFLOW_KEYWORDS = new Set([
   "schedule",
 ]);
 
-function extractTopic(prompt: string): string {
+function extractTopic(prompt: string, context?: ContextPayload): string {
+  // Prefer drag-drop context item titles when available
+  if (context?.items?.length) {
+    const titles = context.items.map((item) => item.title).filter(Boolean);
+    if (titles.length > 0) {
+      return titles.length === 1 ? titles[0] : titles.join(" & ");
+    }
+  }
+
   const words = prompt
     .replace(/[^\w\s]/g, "") // strip punctuation
     .split(/\s+/)
@@ -180,7 +188,7 @@ export async function resolveIntent(
       workflowType: ruleMatch.type,
       source: inferSourceLabel(context),
       sourceType: inferSourceType(context),
-      topic: extractTopic(prompt),
+      topic: extractTopic(prompt, context),
       confidence: ruleMatch.confidence,
     };
   }
