@@ -17,9 +17,19 @@ export default function Home() {
   const intent = useWorkflowStore((s) => s.intent);
   const workflow = useWorkflowStore((s) => s.workflow);
 
+  // Hardcoded display names for each workflow type
+  const WORKFLOW_DISPLAY_NAMES: Record<string, string> = {
+    flashcards: "Generate Flashcards",
+    quiz: "Generate Quiz",
+    summary: "Create Summary",
+    organize: "Organize Notes",
+    audio: "Generate Audio",
+    revision: "Create Revision Plan",
+  };
+
   // Map backend store data to frontend preview format
   const previewData = intent && workflow ? {
-    title: workflow.title,
+    title: WORKFLOW_DISPLAY_NAMES[intent.workflowType] ?? workflow.title,
     subtitle: intent.topic ? `for ${intent.topic}` : undefined,
     confidence: Math.round(intent.confidence * 100),
     sourceMaterial: {
