@@ -1,53 +1,63 @@
 "use client";
 
-import { useState, type DragEvent } from "react";
-import { FolderPlus, File, FolderOpen } from "lucide-react";
-
-type LocalFile = {
-    id: string;
-    name: string;
-    type: "file" | "folder";
-};
+import { useState, useEffect, useCallback } from "react";
+import { Loader2, AlertCircle } from "lucide-react";
+import { FileTreeNode, type FileNode } from "./file-tree-node";
 
 export function LocalFilesSection() {
-    const [files, setFiles] = useState<LocalFile[]>([
-        { id: "local-1", name: "OS_notes.pdf", type: "file" },
-        { id: "local-2", name: "DBMS_revision.md", type: "file" },
-    ]);
+    const [nodes, setNodes] = useState<FileNode[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    function handleDragStart(e: DragEvent, file: LocalFile) {
-        e.dataTransfer.setData(
-            "application/json",
-            JSON.stringify({ id: file.id, title: file.name, source: "local" })
+    const fetchTree = useCallback(async () => {
+        try {
+            const res = await fetch("/api/files/tree");
+            if (!res.ok) throw new Error("Failed to load");
+            const data = await res.json();
+            setNodes(data.tree || []);
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to load files");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchTree();
+    }, [fetchTree]);
+
+    if (loading) {
+        return (
+            <div className="flex items-center gap-2 px-3 py-4 text-xs text-zinc-500">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Scanning files…</span>
+            </div>
         );
-        e.dataTransfer.effectAllowed = "copy";
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center gap-2 px-3 py-3 text-xs text-amber-400/70">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{error}</span>
+            </div>
+        );
+    }
+
+    if (nodes.length === 0) {
+        return (
+            <div className="px-3 py-3 text-xs text-zinc-500">
+                No files found
+            </div>
+        );
     }
 
     return (
-        <div className="space-y-1">
-            {files.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-zinc-500">No files added yet</p>
-            ) : (
-                files.map((file) => (
-                    <button
-                        key={file.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, file)}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-sm cursor-grab active:cursor-grabbing"
-                    >
-                        {file.type === "folder" ? (
-                            <FolderOpen className="w-3.5 h-3.5 text-amber-400/70 shrink-0" />
-                        ) : (
-                            <File className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        )}
-                        <span className="truncate text-left">{file.name}</span>
-                    </button>
-                ))
-            )}
-            <button className="w-full flex items-center gap-2 px-3 py-2 text-zinc-500 hover:text-zinc-300 hover:bg-white/5 rounded-lg transition-colors text-xs mt-1">
-                <FolderPlus className="w-3.5 h-3.5" />
-                <span>Add Folder</span>
-            </button>
+        <div className="space-y-0.5">
+            {nodes.map((node) => (
+                <FileTreeNode key={node.id} node={node} />
+            ))}
         </div>
     );
 }
