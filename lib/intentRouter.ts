@@ -32,50 +32,79 @@ function getOpenAI(): OpenAI {
 
 // RULE-BASED FAST PATH — instant, deterministic, no API cost(we save money yey)
 
+// Study-context words that must appear alongside ambiguous keywords
+const STUDY_CONTEXT = /\b(notes?|files?|docs?|pages?|material|chapter|lecture|course|class|subject|worksheet|slides?|pdf|textbook|book|study|studies|studying|learn|learning)\b/i;
+
 const WORKFLOW_RULES: {
   pattern: RegExp;
   type: WorkflowType;
   confidence: number;
+  requiresStudyContext?: boolean;
 }[] = [
+    // High-confidence, unambiguous keywords — always match
     {
       pattern: /\b(flash\s?cards?|anki|memory\s?cards?)\b/i,
       type: "flashcards",
       confidence: 0.95,
     },
     {
-      pattern: /\b(quiz(zes)?|practice\s?(questions?)?|test\s+(on|about)|mock\s+test(s)?|practice\s+test(s)?)\b/i,
-      type: "quiz",
-      confidence: 0.75,
-    },
-    {
-      pattern: /\b(summar(y|ize|ise|ized|ised|izing|ising))\b/i,
+      pattern: /\b(summarize|summarise)\b/i,
       type: "summary",
       confidence: 0.9,
     },
     {
-      pattern: /\b(organize|organise|organizing|organising|structure|restructure)\b/i,
-      type: "organize",
-      confidence: 0.9,
-    },
-    {
-      pattern: /\b(audio|podcast|tts|text\s?to\s?speech)\b/i,
+      pattern: /\b(podcast|tts|text\s?to\s?speech)\b/i,
       type: "audio",
       confidence: 0.9,
     },
+    // Medium-confidence — require study context to avoid false positives
     {
-      pattern: /\b(revision|revise|revising|exam(s)?|study\s?plan|study\s*schedule|exam\s*schedule|revision\s*schedule)\b/i,
+      pattern: /\b(quiz(zes)?|practice\s?(questions?)?|mock\s+test(s)?|practice\s+test(s)?)\b/i,
+      type: "quiz",
+      confidence: 0.8,
+    },
+    {
+      pattern: /\b(summary|summaries)\b/i,
+      type: "summary",
+      confidence: 0.85,
+      requiresStudyContext: true,
+    },
+    {
+      pattern: /\b(organize|organise|organizing|organising|structure|restructure)\b/i,
+      type: "organize",
+      confidence: 0.85,
+      requiresStudyContext: true,
+    },
+    {
+      pattern: /\b(audio)\b/i,
+      type: "audio",
+      confidence: 0.8,
+      requiresStudyContext: true,
+    },
+    {
+      pattern: /\b(revision|revise|revising|study\s?plan|study\s*schedule|exam\s*schedule|revision\s*schedule)\b/i,
       type: "revision",
       confidence: 0.85,
+    },
+    {
+      pattern: /\b(exam(s)?)\b/i,
+      type: "revision",
+      confidence: 0.75,
+      requiresStudyContext: true,
     },
   ];
 
 
-//clasifies by rule....
+// Classify by rule — checks study context for ambiguous keywords
 function classifyByRules(
   text: string,
 ): { type: WorkflowType; confidence: number } | null {
   for (const rule of WORKFLOW_RULES) {
     if (rule.pattern.test(text)) {
+      // If this rule requires study context, verify it exists in the prompt
+      if (rule.requiresStudyContext && !STUDY_CONTEXT.test(text)) {
+        continue; // Skip this rule — keyword matched but no study context
+      }
       return { type: rule.type, confidence: rule.confidence };
     }
   }
@@ -147,7 +176,15 @@ const WORKFLOW_KEYWORDS = new Set([
   "schedule",
 ]);
 
-function extractTopic(prompt: string): string {
+function extractTopic(prompt: string, context?: ContextPayload): string {
+  // Prefer drag-drop context item titles when available
+  if (context?.items?.length) {
+    const titles = context.items.map((item) => item.title).filter(Boolean);
+    if (titles.length > 0) {
+      return titles.length === 1 ? titles[0] : titles.join(" & ");
+    }
+  }
+
   const words = prompt
     .replace(/[^\w\s]/g, "") // strip punctuation
     .split(/\s+/)
@@ -169,6 +206,9 @@ function extractTopic(prompt: string): string {
 // PRIMARY ENTRY POINT — tries rules first, else falls back to LLM
 // ═══════════════════════════════════════════════════════════════════════
 
+// Minimum confidence to accept a classification (below this → reject)
+const CONFIDENCE_THRESHOLD = 0.4;
+
 export async function resolveIntent(
   prompt: string,
   context?: ContextPayload,
@@ -180,13 +220,26 @@ export async function resolveIntent(
       workflowType: ruleMatch.type,
       source: inferSourceLabel(context),
       sourceType: inferSourceType(context),
-      topic: extractTopic(prompt),
+      topic: extractTopic(prompt, context),
       confidence: ruleMatch.confidence,
     };
   }
 
-  // No rule match → fall back to LLM
-  return parseIntent(prompt, context);
+  // No rule match → fall back to LLM (OpenAI GPT-4o function calling)
+  const llmResult = await parseIntent(prompt, context);
+
+  // Reject if LLM says "none" or confidence is too low
+  if (
+    llmResult.workflowType === ("none" as WorkflowType) ||
+    llmResult.confidence < CONFIDENCE_THRESHOLD
+  ) {
+    throw new Error(
+      "I couldn't identify a study workflow from your request. " +
+      "Try something like \"generate flashcards for OS\" or \"summarize my DBMS notes\".",
+    );
+  }
+
+  return llmResult;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -212,6 +265,7 @@ const PARSE_INTENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
             "organize",
             "audio",
             "revision",
+            "none",
           ],
           description:
             '"flashcards" for flashcard/study card generation, ' +
@@ -219,7 +273,8 @@ const PARSE_INTENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
             '"summary" for condensed study summary/guide, ' +
             '"organize" for organizing and structuring scattered notes, ' +
             '"audio" for audio overview/podcast-style study material, ' +
-            '"revision" for creating a revision/review schedule with calendar events.',
+            '"revision" for creating a revision/review schedule with calendar events, ' +
+            '"none" if the request is NOT related to studying, academics, or working with notes/study materials.',
         },
         source: {
           type: "string",
@@ -259,23 +314,28 @@ const PARSE_INTENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
 
 const SYSTEM_PROMPT = `You are an intent parser for StudyEngine, an academic workflow automation tool.
 
-Your job is to understand what a student wants to do with their study materials and extract structured information.
+Your job is to determine if a user's request is about studying or working with study materials, and if so, extract structured information.
 
-The student can:
-- Generate flashcards from their notes (workflow_type: "flashcards")
-- Generate practice quizzes from their notes (workflow_type: "quiz")
-- Create condensed study summaries (workflow_type: "summary")
-- Organize scattered notes into a structured format (workflow_type: "organize")
-- Generate audio overviews / podcast-style study material (workflow_type: "audio")
-- Create a revision/review schedule with calendar events (workflow_type: "revision")
+Supported study workflows:
+- "flashcards" — generating flashcards or study cards from notes
+- "quiz" — creating practice quizzes or tests from study material
+- "summary" — condensing notes into a study summary or guide
+- "organize" — organizing or structuring scattered notes
+- "audio" — generating audio overviews or podcast-style study material
+- "revision" — creating a revision/review schedule or exam prep plan
+- "none" — the request is NOT about studying, notes, or academics
 
-Their notes can come from:
-- Local files on their computer, e.g. Desktop, Documents folder (source_type: "local_files") — this is the default if not clearly mentioned
-- Notion (source_type: "notion")
-- Downloads folder specifically (source_type: "downloads")
+Note sources:
+- "local_files" — files on their computer (default if not mentioned)
+- "notion" — Notion workspace
+- "downloads" — Downloads folder
 
-Always call the parse_study_intent function with your best interpretation.
-If the request is unclear or not study-related, still make your best guess but set confidence low.`;
+IMPORTANT RULES:
+1. If the request is clearly NOT about studying, notes, or academic work, return workflow_type: "none" with confidence 0.1.
+   Examples of non-study requests: "what is the meaning of life", "hello how are you", "tell me a joke", "what's the weather".
+2. If the request is vaguely study-related but doesn't clearly map to a workflow, return your best guess but set confidence below 0.4.
+3. Only set confidence above 0.7 if you are genuinely confident the user wants a specific study workflow.
+4. Always call the parse_study_intent function.`;
 
 export async function parseIntent(prompt: string, context?: ContextPayload): Promise<ParsedIntent> {
   const openai = getOpenAI();
@@ -323,13 +383,14 @@ export async function parseIntent(prompt: string, context?: ContextPayload): Pro
   }
 
   // Runtime validation — GPT might return values outside our allowed sets
-  const VALID_WORKFLOW_TYPES: WorkflowType[] = [
+  const VALID_WORKFLOW_TYPES = [
     "flashcards",
     "quiz",
     "summary",
     "organize",
     "audio",
     "revision",
+    "none", // Allowed from LLM — rejected later by confidence check in resolveIntent
   ];
   const VALID_SOURCE_TYPES: SourceType[] = [
     "notion",

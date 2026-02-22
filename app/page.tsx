@@ -5,8 +5,48 @@ import { TopBar } from "@/components/top-bar";
 import { HeroSection } from "@/components/hero";
 import { QuickActions } from "@/components/quick-actions";
 import { CommandInput } from "@/components/command-input";
+import {
+  WorkflowPreviewCard,
+} from "@/components/workflow/WorkflowPreviewCard";
+import { useWorkflowStore } from "@/lib/workflow-store";
+import { X } from "lucide-react";
 
 export default function Home() {
+  const appState = useWorkflowStore((s) => s.appState);
+  const startWorkflow = useWorkflowStore((s) => s.startWorkflow);
+  const cancelWorkflow = useWorkflowStore((s) => s.cancelWorkflow);
+  const intent = useWorkflowStore((s) => s.intent);
+  const workflow = useWorkflowStore((s) => s.workflow);
+  const error = useWorkflowStore((s) => s.error);
+  const clearError = useWorkflowStore((s) => s.clearError);
+
+  // Hardcoded display names for each workflow type
+  const WORKFLOW_DISPLAY_NAMES: Record<string, string> = {
+    flashcards: "Generate Flashcards",
+    quiz: "Generate Quiz",
+    summary: "Create Summary",
+    organize: "Organize Notes",
+    audio: "Generate Audio",
+    revision: "Create Revision Plan",
+  };
+
+  // Map backend store data to frontend preview format
+  const previewData = intent && workflow ? {
+    title: WORKFLOW_DISPLAY_NAMES[intent.workflowType] ?? workflow.title,
+    subtitle: intent.topic ? `for ${intent.topic}` : undefined,
+    confidence: Math.round(intent.confidence * 100),
+    sourceMaterial: {
+      name: intent.source,
+      type: (intent.sourceType === "notion" ? "notion" : "local") as "notion" | "local",
+    },
+    architecture: {
+      stageCount: workflow.steps.length,
+      label: "AI Pipeline",
+    },
+    estimatedDuration: workflow.estimatedTime,
+    systemNotes: workflow.description,
+  } : null;
+
   return (
     <div className="flex h-screen bg-[#0f1117] text-white overflow-hidden font-sans selection:bg-blue-500/30">
       <Sidebar />
@@ -15,9 +55,30 @@ export default function Home() {
         <div className="flex-1 flex flex-col items-center justify-center px-6">
           <HeroSection />
           <CommandInput />
+          {error && (
+            <div className="w-full max-w-2xl mx-auto mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3 orca-fade-up">
+              <span className="text-sm text-red-300/90 flex-1">{error}</span>
+              <button
+                onClick={clearError}
+                className="p-0.5 rounded hover:bg-white/10 transition-colors text-red-400 hover:text-white shrink-0 mt-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <QuickActions />
         </div>
       </main>
+
+      {/* Workflow Preview Overlay */}
+      {appState === "preview" && previewData && (
+        <WorkflowPreviewCard
+          data={previewData}
+          onExecute={startWorkflow}
+          onCancel={cancelWorkflow}
+        />
+      )}
     </div>
   );
 }
+

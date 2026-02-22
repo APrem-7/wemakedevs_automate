@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type DragEvent } from "react";
-import { Sparkles, Paperclip, ArrowUp, X, FileText } from "lucide-react";
+import { Sparkles, Paperclip, ArrowUp, X, FileText, Loader2 } from "lucide-react";
+import { useWorkflowStore } from "@/lib/workflow-store";
 
 export type ContextItem = {
     id: string;
@@ -12,18 +13,26 @@ export type ContextItem = {
 };
 
 export function CommandInput() {
-    const [contextItems, setContextItems] = useState<ContextItem[]>([]);
     const [isDragOver, setIsDragOver] = useState(false);
+
+    // Connect to the real workflow store
+    const currentPrompt = useWorkflowStore((s) => s.currentPrompt);
+    const setPrompt = useWorkflowStore((s) => s.setPrompt);
+    const submitPrompt = useWorkflowStore((s) => s.submitPrompt);
+    const appState = useWorkflowStore((s) => s.appState);
+    const contextItems = useWorkflowStore((s) => s.contextItems);
+    const addContextItem = useWorkflowStore((s) => s.addContextItem);
+    const removeContextItem = useWorkflowStore((s) => s.removeContextItem);
+
+    const isLoading = appState === "loading";
 
     function handleDragOver(e: DragEvent) {
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
         setIsDragOver(true);
-
     }
 
     function handleDragLeave(e: DragEvent) {
-        // Only trigger if leaving the actual container (not moving between children)
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
             setIsDragOver(false);
         }
@@ -36,20 +45,29 @@ export function CommandInput() {
         try {
             const data = JSON.parse(e.dataTransfer.getData("application/json"));
             if (data?.id && data?.title && data?.source) {
-                setContextItems((prev) => {
-                    // Prevent duplicates
-                    if (prev.some((item) => item.id === data.id)) return prev;
-                    return [...prev, { id: data.id, title: data.title, source: data.source, icon: data.icon, iconType: data.iconType }];
+                addContextItem({
+                    id: data.id,
+                    title: data.title,
+                    source: data.source,
+                    icon: data.icon,
+                    iconType: data.iconType,
                 });
             }
-            console.log(data);
         } catch {
             // Ignore invalid drop data
         }
     }
 
-    function removeItem(id: string) {
-        setContextItems((prev) => prev.filter((item) => item.id !== id));
+    function handleSubmit() {
+        if (!currentPrompt.trim() || isLoading) return;
+        submitPrompt();
+    }
+
+    function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit();
+        }
     }
 
     return (
@@ -82,7 +100,7 @@ export function CommandInput() {
                                 </span>
                                 <span className="max-w-[160px] truncate">{item.title}</span>
                                 <button
-                                    onClick={() => removeItem(item.id)}
+                                    onClick={() => removeContextItem(item.id)}
                                     className="ml-0.5 p-0.5 rounded hover:bg-white/10 transition-colors text-blue-400 hover:text-white"
                                 >
                                     <X className="w-3 h-3" />
@@ -95,12 +113,20 @@ export function CommandInput() {
                 {/* Input row */}
                 <div className="flex items-center gap-3 px-2">
                     <div className="w-6 h-6 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
-                        <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                        {isLoading ? (
+                            <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                        ) : (
+                            <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                        )}
                     </div>
                     <input
                         type="text"
+                        value={currentPrompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        onKeyDown={handleKeyDown}
                         placeholder={isDragOver ? "Drop here to add context…" : "What would you like to study today?"}
                         className="w-full bg-transparent text-white placeholder:text-zinc-500 border-none outline-none text-sm"
+                        disabled={isLoading}
                     />
                 </div>
 
@@ -116,8 +142,16 @@ export function CommandInput() {
                         <span className="text-xs text-zinc-500 font-medium hidden sm:inline-block">
                             Press Enter to send
                         </span>
-                        <button className="w-7 h-7 bg-blue-500 hover:bg-blue-600 rounded-lg flex items-center justify-center text-white transition-colors">
-                            <ArrowUp className="w-4 h-4" />
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isLoading || !currentPrompt.trim()}
+                            className="w-7 h-7 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center justify-center text-white transition-colors"
+                        >
+                            {isLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <ArrowUp className="w-4 h-4" />
+                            )}
                         </button>
                     </div>
                 </div>
@@ -132,3 +166,4 @@ export function CommandInput() {
         </div>
     );
 }
+
