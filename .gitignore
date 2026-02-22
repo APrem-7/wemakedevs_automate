@@ -42,6 +42,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Uploaded personal files
+/uploads/
+
 # SQLite database
 *.db
 *.db-journal
